@@ -14,7 +14,7 @@ import {
   AlertCircle, 
   Edit3, 
   ExternalLink, 
-  History, 
+  History as HistoryIcon, 
   Pill, 
   Sparkles, 
   ChevronRight, 
@@ -145,7 +145,7 @@ export default function PrescriptionHistoryTab({ onEditPrescription, onWriteNew 
       <div className="bg-white dark:bg-slate-900 p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-950/60 text-teal-600 dark:text-teal-400 flex items-center justify-center border border-teal-200 dark:border-teal-800">
-            <History className="w-5 h-5" />
+            <HistoryIcon className="w-5 h-5" />
           </div>
           <div>
             <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white flex items-center gap-2">

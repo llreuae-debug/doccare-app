@@ -19,35 +19,47 @@ export default function SEOHead({
     // 1. Update Document Title
     document.title = title;
 
-    // 2. Helper to set or update meta tag
-    const setMetaTag = (selector, attribute, attrValue, content) => {
-      let element = document.querySelector(`meta[${attribute}="${attrValue}"]`);
-      if (!element) {
-        element = document.createElement('meta');
-        element.setAttribute(attribute, attrValue);
-        document.head.appendChild(element);
+    // 2. Helper to set or update meta tag safely
+    const setMetaTag = (attrName, attrValue, content) => {
+      try {
+        let element = document.querySelector(`meta[${attrName}="${attrValue}"]`);
+        if (!element) {
+          element = document.createElement('meta');
+          element.setAttribute(attrName, attrValue);
+          document.head.appendChild(element);
+        }
+        element.setAttribute('content', content || '');
+      } catch (e) {
+        // Safe fallback if querySelector encounters special characters
+        const metas = Array.from(document.getElementsByTagName('meta'));
+        let element = metas.find(m => m.getAttribute(attrName) === attrValue);
+        if (!element) {
+          element = document.createElement('meta');
+          element.setAttribute(attrName, attrValue);
+          document.head.appendChild(element);
+        }
+        element.setAttribute('content', content || '');
       }
-      element.setAttribute('content', content);
     };
 
     // Standard Meta Tags
-    setMetaTag('name', 'description', 'description', description);
-    setMetaTag('name', 'robots', 'robots', 'index, follow, max-image-preview:large');
+    setMetaTag('name', 'description', description);
+    setMetaTag('name', 'robots', 'index, follow, max-image-preview:large');
 
     // OpenGraph Meta Tags
-    setMetaTag('property', 'og:title', 'og:title', title);
-    setMetaTag('property', 'og:description', 'og:description', description);
-    setMetaTag('property', 'og:type', 'og:type', ogType);
-    setMetaTag('property', 'og:url', 'og:url', canonicalUrl);
-    setMetaTag('property', 'og:image', 'og:image', ogImage);
-    setMetaTag('property', 'og:site_name', 'og:site_name', 'DocCare Pakistan');
-    setMetaTag('property', 'og:locale', 'og:locale', lang === 'ur' ? 'ur_PK' : 'en_PK');
+    setMetaTag('property', 'og:title', title);
+    setMetaTag('property', 'og:description', description);
+    setMetaTag('property', 'og:type', ogType);
+    setMetaTag('property', 'og:url', canonicalUrl);
+    setMetaTag('property', 'og:image', ogImage);
+    setMetaTag('property', 'og:site_name', 'DocCare Pakistan');
+    setMetaTag('property', 'og:locale', lang === 'ur' ? 'ur_PK' : 'en_PK');
 
     // Twitter Card Tags
-    setMetaTag('name', 'twitter:card', 'twitter:card', 'summary_large_image');
-    setMetaTag('name', 'twitter:title', 'twitter:title', title);
-    setMetaTag('name', 'twitter:description', 'twitter:description', description);
-    setMetaTag('name', 'twitter:image', 'twitter:image', ogImage);
+    setMetaTag('name', 'twitter:card', 'summary_large_image');
+    setMetaTag('name', 'twitter:title', title);
+    setMetaTag('name', 'twitter:description', description);
+    setMetaTag('name', 'twitter:image', ogImage);
 
     // Canonical Tag
     let canonicalLink = document.querySelector('link[rel="canonical"]');

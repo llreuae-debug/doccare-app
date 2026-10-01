@@ -18,7 +18,7 @@ import {
   FileText,
   AlertCircle,
   MessageSquare,
-  History
+  History as HistoryIcon
 } from 'lucide-react';
 import PrescriptionPDF from './PrescriptionPDF';
 import SendWhatsAppModal from './SendWhatsAppModal';
@@ -164,7 +164,7 @@ export default function PrescriptionPreviewModal({
               }`}
               title="View WhatsApp dispatch and download history"
             >
-              <History className="w-3.5 h-3.5" />
+              <HistoryIcon className="w-3.5 h-3.5" />
               <span>Sent History {sentLogs.length > 0 && `(${sentLogs.length})`}</span>
             </button>
 
@@ -222,7 +222,7 @@ export default function PrescriptionPreviewModal({
           <div className="bg-slate-50 dark:bg-slate-850 p-4 border-b border-slate-200 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <History className="w-4 h-4 text-teal-600" />
+                <HistoryIcon className="w-4 h-4 text-teal-600" />
                 <span>WhatsApp Dispatch History & Access Tracking</span>
               </h4>
               <span className="text-[11px] text-slate-400">

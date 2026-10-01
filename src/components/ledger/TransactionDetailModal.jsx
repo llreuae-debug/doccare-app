@@ -11,7 +11,7 @@ import {
   User, 
   Building2, 
   AlertTriangle,
-  History,
+  History as HistoryIcon,
   Check,
   Loader2,
   DollarSign
@@ -184,7 +184,7 @@ export default function TransactionDetailModal({
               {transaction.audit_history && transaction.audit_history.length > 0 && (
                 <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1.5">
                   <div className="flex items-center gap-1.5 text-[11px] font-bold text-slate-500">
-                    <History className="w-3.5 h-3.5 text-teal-600" />
+                    <HistoryIcon className="w-3.5 h-3.5 text-teal-600" />
                     <span>Audit History ({transaction.audit_history.length} revisions)</span>
                   </div>
                   <div className="text-[10px] text-slate-400 space-y-1">

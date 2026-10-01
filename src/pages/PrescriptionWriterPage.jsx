@@ -32,7 +32,8 @@ import {
   HelpCircle,
   RefreshCw,
   Database,
-  CheckCircle
+  CheckCircle,
+  History as HistoryIcon
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -766,7 +767,7 @@ export default function PrescriptionWriterPage({ prefillAppointment, onResetPref
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <History className="w-4 h-4 text-teal-600" />
+            <HistoryIcon className="w-4 h-4 text-teal-600" />
             <span>📋 Prescription History</span>
           </button>
         </div>
