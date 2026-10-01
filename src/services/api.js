@@ -396,7 +396,7 @@ export const api = {
   // --- PAKISTAN FORMULARY & MEDICINE DATABASE ---
   getMedicines: (params = {}) => {
     if (typeof params === 'string') {
-      return request(`/medicines?limit=50&q=${encodeURIComponent(params)}`);
+      return request(`/medicines?q=${encodeURIComponent(params)}`);
     }
     const query = new URLSearchParams(params).toString();
     return request(`/medicines${query ? `?${query}` : ''}`);
@@ -404,6 +404,7 @@ export const api = {
   searchMedicines: (q = '', options = {}) => {
     const params = new URLSearchParams();
     if (q) params.set('q', q);
+    if (options.page) params.set('page', options.page);
     if (options.limit) params.set('limit', options.limit);
     if (options.form || options.dosage_form) params.set('form', options.form || options.dosage_form);
     if (options.route) params.set('route', options.route);
@@ -414,6 +415,7 @@ export const api = {
   },
   getMedicinesMeta: () => request('/medicines/meta'),
   getFormularySyncStatus: () => request('/medicines/sync-status'),
+  verifyFormularyDataset: () => request('/medicines/verify'),
   getMedicineById: (id) => request(`/medicines/${id}`),
   addMedicine: (data) => request('/medicines', { method: 'POST', body: JSON.stringify(data) }),
   createCustomMedicine: (data) => request('/medicines', { method: 'POST', body: JSON.stringify(data) }),

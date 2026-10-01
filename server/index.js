@@ -1081,8 +1081,9 @@ app.get('/api/medicines/sync-status', (req, res) => {
 });
 
 app.get('/api/medicines', optionalDoctorAuth, (req, res) => {
-  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit } = req.query;
+  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit, page } = req.query;
   const numLimit = parseInt(limit, 10) || 100;
+  const numPage = parseInt(page, 10) || 1;
   const medicines = db.searchMedicines(q, {
     category: category || therapeutic_class,
     form: form || dosage_form,
@@ -1090,14 +1091,22 @@ app.get('/api/medicines', optionalDoctorAuth, (req, res) => {
     manufacturer,
     status: status || 'all',
     doctorId: req.doctorId,
+    limit: numLimit,
+    page: numPage
+  });
+  res.json({
+    medicines,
+    total: medicines.total !== undefined ? medicines.total : medicines.length,
+    page: medicines.page || numPage,
+    totalPages: medicines.totalPages || 1,
     limit: numLimit
   });
-  res.json({ medicines, total: medicines.length });
 });
 
 app.get('/api/medicines/search', optionalDoctorAuth, (req, res) => {
-  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit } = req.query;
+  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit, page } = req.query;
   const numLimit = parseInt(limit, 10) || 50;
+  const numPage = parseInt(page, 10) || 1;
   const medicines = db.searchMedicines(q, {
     category: category || therapeutic_class,
     form: form || dosage_form,
@@ -1105,9 +1114,21 @@ app.get('/api/medicines/search', optionalDoctorAuth, (req, res) => {
     manufacturer,
     status: status || 'active',
     doctorId: req.doctorId,
+    limit: numLimit,
+    page: numPage
+  });
+  res.json({
+    medicines,
+    total: medicines.total !== undefined ? medicines.total : medicines.length,
+    page: medicines.page || numPage,
+    totalPages: medicines.totalPages || 1,
     limit: numLimit
   });
-  res.json({ medicines, total: medicines.length });
+});
+
+app.get('/api/medicines/verify', optionalDoctorAuth, (req, res) => {
+  const audit = db.verifyFormularyCompleteness();
+  res.json({ success: true, verification: audit });
 });
 
 app.get('/api/medicines/favorites', requireDoctorAuth, (req, res) => {
@@ -1221,29 +1242,33 @@ app.post('/api/medicines', requireDoctorAuth, (req, res) => {
     });
   }
 
-  const newMed = db.addMedicine({
-    brand_name: sanitizeInput(brand_name),
-    generic_name: sanitizeInput(generic_name),
-    active_ingredient: sanitizeInput(activeIng),
-    active_ingredients: [sanitizeInput(activeIng)],
-    strength: sanitizeInput(strength),
-    strength_unit: sanitizeInput(strength_unit) || (strength.match(/[a-zA-Z]+/g) || ['mg'])[0],
-    dosage_form: sanitizeInput(resolvedDosageForm),
-    form: sanitizeInput(resolvedDosageForm),
-    route: sanitizeInput(route) || 'Oral',
-    manufacturer: sanitizeInput(manufacturer) || 'Pharmaceuticals Pakistan',
-    pack_size: sanitizeInput(pack_size) || 'Standard Pack',
-    therapeutic_class: sanitizeInput(therapeutic_class || category) || 'General Formulary',
-    category: sanitizeInput(therapeutic_class || category) || 'General Formulary',
-    indication: sanitizeInput(indication) || 'As clinically indicated',
-    prescription_status: prescription_status || 'Rx Only',
-    registration_reference: sanitizeInput(registration_reference) || `DRAP-PK-MAN-${Date.now().toString().slice(-6)}`,
-    notes: sanitizeInput(notes) || '',
-    status: status || 'active',
-    source: `DocCare Clinical Formulary (${req.doctor?.name || 'Dr. Practice'})`
-  }, req.doctorId);
+  try {
+    const newMed = db.addMedicine({
+      brand_name: sanitizeInput(brand_name),
+      generic_name: sanitizeInput(generic_name),
+      active_ingredient: sanitizeInput(activeIng),
+      active_ingredients: [sanitizeInput(activeIng)],
+      strength: sanitizeInput(strength),
+      strength_unit: sanitizeInput(strength_unit) || (strength.match(/[a-zA-Z]+/g) || ['mg'])[0],
+      dosage_form: sanitizeInput(resolvedDosageForm),
+      form: sanitizeInput(resolvedDosageForm),
+      route: sanitizeInput(route) || 'Oral',
+      manufacturer: sanitizeInput(manufacturer) || 'Pharmaceuticals Pakistan',
+      pack_size: sanitizeInput(pack_size) || 'Standard Pack',
+      therapeutic_class: sanitizeInput(therapeutic_class || category) || 'General Formulary',
+      category: sanitizeInput(therapeutic_class || category) || 'General Formulary',
+      indication: sanitizeInput(indication) || 'As clinically indicated',
+      prescription_status: prescription_status || 'Rx Only',
+      registration_reference: sanitizeInput(registration_reference) || `DRAP-PK-MAN-${Date.now().toString().slice(-6)}`,
+      notes: sanitizeInput(notes) || '',
+      status: status || 'active',
+      source: `DocCare Clinical Formulary (${req.doctor?.name || 'Dr. Practice'})`
+    }, req.doctorId);
 
-  res.json({ success: true, message: "Medicine added to Pakistan Formulary successfully", medicine: newMed });
+    res.json({ success: true, message: "Medicine added to Pakistan Formulary successfully", medicine: newMed });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ error: err.message, duplicate: err.existingMedicine });
+  }
 });
 
 app.put('/api/medicines/:id', requireDoctorAuth, (req, res) => {
@@ -1348,7 +1373,7 @@ app.post('/api/prescriptions', requireDoctorAuth, (req, res) => {
       appointment_id,
       diagnosis: sanitizeInput(diagnosis),
       symptoms: sanitizeInput(symptoms),
-      items: items || [],
+      items: items || req.body.medicines || [],
       tests_advised: sanitizeInput(tests_advised),
       advice: sanitizeInput(advice),
       follow_up_date

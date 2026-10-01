@@ -14,6 +14,7 @@ import {
   SEED_LEDGER
 } from './data/seeds.js';
 import { PAKISTAN_FORMULARY, LAST_UPDATED, FORMULARY_VERSION } from './data/pakistanFormulary.js';
+import { normalizeMedicineRecord, auditDatasetIntegrity } from './aiEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -241,10 +242,43 @@ class Database {
         };
       }
 
+      this.rebuildSearchIndex();
       this.save();
     } catch (err) {
       console.error("Database initialization error:", err);
     }
+  }
+
+  rebuildSearchIndex() {
+    this.searchIndex = new Map();
+    const list = this.data.medicines || [];
+    list.forEach(med => {
+      const tokens = new Set();
+      const addTokens = (str) => {
+        if (!str || typeof str !== 'string') return;
+        str.toLowerCase().split(/[\s,+/()\-–—.[\]]+/).forEach(tok => {
+          const t = tok.trim();
+          if (t.length >= 2) tokens.add(t);
+        });
+      };
+
+      addTokens(med.brand_name);
+      addTokens(med.generic_name);
+      addTokens(med.active_ingredient);
+      addTokens(med.strength);
+      addTokens(med.dosage_form || med.form);
+      addTokens(med.route);
+      addTokens(med.manufacturer);
+      addTokens(med.registration_number || med.registration_reference);
+      addTokens(med.therapeutic_class || med.category);
+
+      tokens.forEach(token => {
+        if (!this.searchIndex.has(token)) {
+          this.searchIndex.set(token, new Set());
+        }
+        this.searchIndex.get(token).add(med.id);
+      });
+    });
   }
 
   save() {
@@ -436,26 +470,44 @@ class Database {
     const forms = Array.from(new Set(list.map(m => m.dosage_form || m.form).filter(Boolean)));
     const manufacturers = Array.from(new Set(list.map(m => m.manufacturer).filter(Boolean)));
 
+    if (!this.searchIndex || this.searchIndex.size === 0) {
+      this.rebuildSearchIndex();
+    }
+
+    const audit = auditDatasetIntegrity(list, this.searchIndex?.size || total, total);
+
     if (!this.data.formularyMeta) {
       this.data.formularyMeta = {
-        source: "Drug Regulatory Authority of Pakistan (DRAP) Registered Index",
+        source: "Drug Regulatory Authority of Pakistan (DRAP) National Master Register",
         last_updated: LAST_UPDATED || new Date().toISOString(),
         last_synced_at: new Date().toISOString(),
         last_successful_sync: new Date().toISOString(),
-        status: "up_to_date",
+        status: audit.is_reconciled ? "up_to_date" : "incomplete",
         version: FORMULARY_VERSION || "2026.10.1-PK-DRAP",
         sync_frequency: "Every 24 hours (Daily)",
         total_medicines: total,
         active_medicines: active,
         inactive_medicines: inactive,
+        source_total: audit.source_total,
+        fetched_total: audit.fetched_total,
+        validated_total: audit.validated_total,
+        search_index_total: audit.search_index_total,
+        completeness_percentage: audit.completeness_percentage,
+        is_reconciled: audit.is_reconciled,
         coverage: "Comprehensive DRAP Registered Formulary: Antibiotics, Cardiology, Diabetes, Analgesics, GI, Respiratory, Dermatology, Ophthalmology, Allergy"
       };
     } else {
       this.data.formularyMeta.total_medicines = total;
       this.data.formularyMeta.active_medicines = active;
       this.data.formularyMeta.inactive_medicines = inactive;
-      if (!this.data.formularyMeta.status) {
-        this.data.formularyMeta.status = "up_to_date";
+      this.data.formularyMeta.source_total = audit.source_total;
+      this.data.formularyMeta.fetched_total = audit.fetched_total;
+      this.data.formularyMeta.validated_total = audit.validated_total;
+      this.data.formularyMeta.search_index_total = audit.search_index_total;
+      this.data.formularyMeta.completeness_percentage = audit.completeness_percentage;
+      this.data.formularyMeta.is_reconciled = audit.is_reconciled;
+      if (!this.data.formularyMeta.status || this.data.formularyMeta.status === "up_to_date") {
+        this.data.formularyMeta.status = audit.is_reconciled ? "up_to_date" : "incomplete";
       }
       if (!this.data.formularyMeta.version) {
         this.data.formularyMeta.version = FORMULARY_VERSION || "2026.10.1-PK-DRAP";
@@ -464,6 +516,7 @@ class Database {
 
     return {
       ...this.data.formularyMeta,
+      audit,
       categoriesCount: categories.length,
       formsCount: forms.length,
       manufacturersCount: manufacturers.length,
@@ -475,6 +528,15 @@ class Database {
 
   getMedicinesMeta() {
     return this.getFormularyMeta();
+  }
+
+  verifyFormularyCompleteness(expectedSourceTotal = null) {
+    const list = this.getAllMedicines(null, true);
+    if (!this.searchIndex || this.searchIndex.size === 0) {
+      this.rebuildSearchIndex();
+    }
+    const audit = auditDatasetIntegrity(list, this.searchIndex?.size || list.length, expectedSourceTotal || list.length);
+    return audit;
   }
 
   searchMedicines(queryOrOptions = '', options = {}) {
@@ -492,7 +554,8 @@ class Database {
     }
 
     const doctorId = opts.doctorId || null;
-    const limit = parseInt(opts.limit, 10) || 50;
+    const page = Math.max(1, parseInt(opts.page, 10) || 1);
+    const limit = Math.max(1, parseInt(opts.limit, 10) || 50);
     const formFilter = opts.form || opts.dosage_form || null;
     const routeFilter = opts.route || null;
     const categoryFilter = opts.category || opts.therapeutic_class || null;
@@ -533,63 +596,67 @@ class Database {
       filtered = filtered.filter(m => (m.manufacturer || '').toLowerCase().includes(mLower));
     }
 
-    if (!q) {
-      return filtered.slice(0, limit);
+    let matches = filtered;
+
+    if (q) {
+      const searchTokens = q.split(/[\s,+/()\-–—.[\]]+/).filter(t => t.length > 0);
+
+      matches = filtered.filter(m => {
+        const brand = (m.brand_name || m.name || '').toLowerCase();
+        const generic = (m.generic_name || m.generic || '').toLowerCase();
+        const activeIng = (m.active_ingredient || '').toLowerCase();
+        const cat = (m.category || m.therapeutic_class || '').toLowerCase();
+        const drugClass = (m.drug_class || '').toLowerCase();
+        const form = (m.dosage_form || m.form || '').toLowerCase();
+        const route = (m.route || '').toLowerCase();
+        const strength = (m.strength || '').toLowerCase();
+        const mfg = (m.manufacturer || '').toLowerCase();
+        const reg = (m.registration_number || m.registration_reference || '').toLowerCase();
+        
+        const activeIngredientsMatch = Array.isArray(m.active_ingredients) 
+          ? m.active_ingredients.some(ai => ai.toLowerCase().includes(q))
+          : false;
+
+        const combined = `${brand} ${generic} ${activeIng} ${strength} ${form} ${route} ${cat} ${drugClass} ${mfg} ${reg}`;
+
+        // Match all search tokens (conjunctive search)
+        return searchTokens.every(tok => combined.includes(tok)) || activeIngredientsMatch;
+      });
+
+      matches.sort((a, b) => {
+        const aBrand = (a.brand_name || '').toLowerCase();
+        const bBrand = (b.brand_name || '').toLowerCase();
+        const aBrandStart = aBrand.startsWith(q);
+        const bBrandStart = bBrand.startsWith(q);
+        if (aBrandStart && !bBrandStart) return -1;
+        if (!aBrandStart && bBrandStart) return 1;
+
+        const aGen = (a.generic_name || '').toLowerCase();
+        const bGen = (b.generic_name || '').toLowerCase();
+        const aGenStart = aGen.startsWith(q);
+        const bGenStart = bGen.startsWith(q);
+        if (aGenStart && !bGenStart) return -1;
+        if (!aGenStart && bGenStart) return 1;
+
+        if (a.is_favorite && !b.is_favorite) return -1;
+        if (!a.is_favorite && b.is_favorite) return 1;
+
+        return aBrand.localeCompare(bBrand);
+      });
     }
 
-    const matches = filtered.filter(m => {
-      const brand = (m.brand_name || m.name || '').toLowerCase();
-      const generic = (m.generic_name || m.generic || '').toLowerCase();
-      const activeIng = (m.active_ingredient || '').toLowerCase();
-      const cat = (m.category || m.therapeutic_class || '').toLowerCase();
-      const drugClass = (m.drug_class || '').toLowerCase();
-      const form = (m.dosage_form || m.form || '').toLowerCase();
-      const route = (m.route || '').toLowerCase();
-      const strength = (m.strength || '').toLowerCase();
-      const mfg = (m.manufacturer || '').toLowerCase();
-      const reg = (m.registration_reference || '').toLowerCase();
-      
-      const activeIngredientsMatch = Array.isArray(m.active_ingredients) 
-        ? m.active_ingredients.some(ai => ai.toLowerCase().includes(q))
-        : false;
+    const totalMatches = matches.length;
+    const totalPages = Math.ceil(totalMatches / limit) || 1;
+    const offset = (page - 1) * limit;
+    const pagedResults = matches.slice(offset, offset + limit);
 
-      return (
-        brand.includes(q) ||
-        generic.includes(q) ||
-        activeIng.includes(q) ||
-        strength.includes(q) ||
-        form.includes(q) ||
-        route.includes(q) ||
-        cat.includes(q) ||
-        drugClass.includes(q) ||
-        mfg.includes(q) ||
-        reg.includes(q) ||
-        activeIngredientsMatch
-      );
-    });
+    // Attach pagination metadata
+    pagedResults.total = totalMatches;
+    pagedResults.page = page;
+    pagedResults.totalPages = totalPages;
+    pagedResults.limit = limit;
 
-    matches.sort((a, b) => {
-      const aBrand = (a.brand_name || '').toLowerCase();
-      const bBrand = (b.brand_name || '').toLowerCase();
-      const aBrandStart = aBrand.startsWith(q);
-      const bBrandStart = bBrand.startsWith(q);
-      if (aBrandStart && !bBrandStart) return -1;
-      if (!aBrandStart && bBrandStart) return 1;
-
-      const aGen = (a.generic_name || '').toLowerCase();
-      const bGen = (b.generic_name || '').toLowerCase();
-      const aGenStart = aGen.startsWith(q);
-      const bGenStart = bGen.startsWith(q);
-      if (aGenStart && !bGenStart) return -1;
-      if (!aGenStart && bGenStart) return 1;
-
-      if (a.is_favorite && !b.is_favorite) return -1;
-      if (!a.is_favorite && b.is_favorite) return 1;
-
-      return aBrand.localeCompare(bBrand);
-    });
-
-    return matches.slice(0, limit);
+    return pagedResults;
   }
 
   getMedicineById(id) {
@@ -662,18 +729,18 @@ class Database {
   }
 
   addMedicine(medData, doctorId = null) {
-    const required = ['brand_name', 'generic_name', 'strength', 'dosage_form'];
-    for (const field of required) {
-      if (!medData[field] || String(medData[field]).trim() === '') {
-        throw new Error(`Required field missing: ${field.replace('_', ' ')}`);
-      }
+    const aiNorm = normalizeMedicineRecord(medData);
+    const item = aiNorm.normalized || medData;
+
+    if (!item.brand_name || !item.generic_name || !item.strength || (!item.dosage_form && !item.form)) {
+      throw new Error(`Required fields missing (brand_name, generic_name, strength, dosage_form)`);
     }
 
-    const brandName = medData.brand_name.trim();
-    const genericName = medData.generic_name.trim();
-    const strength = medData.strength.trim();
-    const dosageForm = medData.dosage_form.trim();
-    const manufacturer = (medData.manufacturer || 'Pakistan Licensed Manufacturer').trim();
+    const brandName = item.brand_name.trim();
+    const genericName = item.generic_name.trim();
+    const strength = item.strength.trim();
+    const dosageForm = (item.dosage_form || item.form || 'Tablet').trim();
+    const manufacturer = (item.manufacturer || 'Pakistan Licensed Manufacturer').trim();
 
     // Check for duplicates
     const duplicate = this.findDuplicateMedicine(brandName, strength, dosageForm, manufacturer);
@@ -684,37 +751,16 @@ class Database {
       throw err;
     }
 
-    const activeIngredient = medData.active_ingredient 
-      ? medData.active_ingredient.trim() 
-      : (Array.isArray(medData.active_ingredients) ? medData.active_ingredients.join(', ') : genericName);
-
     const now = new Date().toISOString();
     const newMed = {
-      id: `med-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      ...item,
+      id: item.id || `med-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
       brand_name: brandName,
       generic_name: genericName,
-      active_ingredient: activeIngredient,
-      active_ingredients: [activeIngredient],
       strength: strength,
-      strength_unit: medData.strength_unit || "mg",
-      available_strengths: Array.isArray(medData.available_strengths) ? medData.available_strengths : [strength],
       dosage_form: dosageForm,
       form: dosageForm,
-      route: medData.route || "Oral",
       manufacturer: manufacturer,
-      pack_size: medData.pack_size || "Standard Commercial Pack",
-      therapeutic_class: medData.therapeutic_class || "General Pharmaceutical",
-      indication: medData.indication || "As advised by registered physician",
-      prescription_status: medData.prescription_status || "Rx Only",
-      registration_reference: medData.registration_reference || `DRAP-PK-${Math.floor(10000 + Math.random() * 90000)}`,
-      source: medData.source || "DocCare Verified Clinical Entry",
-      source_record_id: medData.source_record_id || null,
-      status: medData.status || "active",
-      default_dose: medData.default_dose || "As directed",
-      default_frequency: medData.default_frequency || "BD — Twice daily",
-      default_duration: medData.default_duration || "5 Days",
-      form_instructions: Array.isArray(medData.form_instructions) ? medData.form_instructions : ["Take after meals with water"],
-      notes: medData.notes || "",
       created_by: doctorId,
       created_at: now,
       updated_at: now,
@@ -723,6 +769,7 @@ class Database {
 
     if (!this.data.medicines) this.data.medicines = [];
     this.data.medicines.unshift(newMed);
+    this.rebuildSearchIndex();
     this.save();
 
     this.logAudit(
@@ -821,19 +868,22 @@ class Database {
   }
 
   // 24-Hour Live Synchronization Engine for Pakistan Formulary
-  syncPakistanFormulary(source = "DRAP / Pakistan National Formulary Live Feed", incomingData = null) {
+  syncPakistanFormulary(source = "DRAP / Pakistan National Formulary Live Feed", incomingData = null, options = {}) {
     const startTime = new Date().toISOString();
     const syncId = `sync-${Date.now()}`;
     let added = 0;
     let updated = 0;
     let deactivated = 0;
     let failed = 0;
+    let duplicateCount = 0;
     const errors = [];
+    const normalizedItems = [];
 
     const incomingRecords = Array.isArray(incomingData) && incomingData.length > 0
       ? incomingData
       : (Array.isArray(PAKISTAN_FORMULARY) ? PAKISTAN_FORMULARY : []);
 
+    const expectedSourceTotal = options.expectedSourceTotal || incomingRecords.length;
     const now = new Date().toISOString();
 
     if (!this.data.medicines || this.data.medicines.length === 0) {
@@ -843,19 +893,23 @@ class Database {
     try {
       incomingRecords.forEach((item, index) => {
         try {
-          if (!item.brand_name || !item.generic_name || !item.strength || (!item.dosage_form && !item.form)) {
+          const aiResult = normalizeMedicineRecord(item);
+          if (!aiResult.isValid || !aiResult.normalized) {
             failed++;
-            errors.push(`Record #${index + 1} (${item.brand_name || 'Unknown'}): Missing required fields`);
+            errors.push(`Record #${index + 1} (${item.brand_name || 'Unknown'}): ${aiResult.errors.join(', ')}`);
             return;
           }
 
+          const normalizedItem = aiResult.normalized;
+          normalizedItems.push(normalizedItem);
+
           const existingIdx = this.data.medicines.findIndex(m => 
-            m.id === item.id || 
+            m.id === normalizedItem.id || 
             (
-              (m.brand_name || '').trim().toLowerCase() === (item.brand_name || '').trim().toLowerCase() &&
-              (m.strength || '').trim().toLowerCase() === (item.strength || '').trim().toLowerCase() &&
-              (m.dosage_form || m.form || '').trim().toLowerCase() === (item.dosage_form || item.form || '').trim().toLowerCase() &&
-              (m.manufacturer || '').trim().toLowerCase() === (item.manufacturer || '').trim().toLowerCase()
+              (m.brand_name || '').trim().toLowerCase() === (normalizedItem.brand_name || '').trim().toLowerCase() &&
+              (m.strength || '').trim().toLowerCase() === (normalizedItem.strength || '').trim().toLowerCase() &&
+              (m.dosage_form || m.form || '').trim().toLowerCase() === (normalizedItem.dosage_form || normalizedItem.form || '').trim().toLowerCase() &&
+              (m.manufacturer || '').trim().toLowerCase() === (normalizedItem.manufacturer || '').trim().toLowerCase()
             )
           );
 
@@ -863,7 +917,7 @@ class Database {
             // Update existing record
             this.data.medicines[existingIdx] = {
               ...this.data.medicines[existingIdx],
-              ...item,
+              ...normalizedItem,
               id: this.data.medicines[existingIdx].id, // Preserve ID
               updated_at: now,
               last_synced_at: now
@@ -872,9 +926,9 @@ class Database {
           } else {
             // Insert new record
             this.data.medicines.push({
-              ...item,
-              id: item.id || `med-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              status: item.status || 'active',
+              ...normalizedItem,
+              id: normalizedItem.id || `med-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              status: normalizedItem.status || 'active',
               source: source,
               created_at: now,
               updated_at: now,
@@ -888,8 +942,13 @@ class Database {
         }
       });
 
+      this.rebuildSearchIndex();
+
       const completedTime = new Date().toISOString();
-      const status = failed === 0 ? 'success' : (added > 0 || updated > 0 ? 'partial' : 'failed');
+      const audit = auditDatasetIntegrity(this.data.medicines, this.searchIndex?.size || this.data.medicines.length, expectedSourceTotal);
+
+      const status = audit.is_reconciled ? 'success' : (added > 0 || updated > 0 ? 'partial' : 'failed');
+      const formularyStatus = audit.is_reconciled ? 'up_to_date' : (status === 'failed' ? 'unavailable' : 'sync_incomplete');
 
       // Update formulary meta
       this.data.formularyMeta = {
@@ -897,12 +956,19 @@ class Database {
         last_updated: now,
         last_synced_at: now,
         last_successful_sync: status !== 'failed' ? now : (this.data.formularyMeta?.last_successful_sync || now),
-        status: status === 'failed' ? 'unavailable' : 'up_to_date',
+        status: formularyStatus,
         version: `2026.${new Date().getMonth() + 1}.${new Date().getDate()}-PK-DRAP`,
         sync_frequency: "Every 24 hours (Daily)",
         total_medicines: this.data.medicines.length,
-        active_medicines: this.data.medicines.filter(m => m.status === 'active').length,
-        inactive_medicines: this.data.medicines.filter(m => m.status === 'inactive').length
+        active_medicines: this.data.medicines.filter(m => (m.status || 'active') === 'active').length,
+        inactive_medicines: this.data.medicines.filter(m => m.status === 'inactive').length,
+        source_total: audit.source_total,
+        fetched_total: incomingRecords.length,
+        validated_total: normalizedItems.length,
+        search_index_total: audit.search_index_total,
+        completeness_percentage: audit.completeness_percentage,
+        is_reconciled: audit.is_reconciled,
+        coverage: "Comprehensive DRAP Registered Formulary: Antibiotics, Cardiology, Diabetes, Analgesics, GI, Respiratory, Dermatology, Ophthalmology, Allergy"
       };
 
       // Create sync log
@@ -911,12 +977,19 @@ class Database {
         started_at: startTime,
         completed_at: completedTime,
         status: status,
+        formulary_status: formularyStatus,
         source: source,
+        source_total: expectedSourceTotal,
+        records_fetched: incomingRecords.length,
         records_processed: incomingRecords.length,
+        records_validated: normalizedItems.length,
         records_added: added,
         records_updated: updated,
         records_deactivated: deactivated,
         records_failed: failed,
+        records_duplicate: duplicateCount,
+        completeness_percentage: audit.completeness_percentage,
+        is_reconciled: audit.is_reconciled,
         error_log: errors.length > 0 ? errors.slice(0, 15) : null
       };
 
@@ -925,45 +998,55 @@ class Database {
       if (this.data.medicineSyncLogs.length > 50) this.data.medicineSyncLogs.pop(); // Keep 50 logs
 
       this.save();
-      this.logAudit('system', 'FORMULARY_SYNC_COMPLETED', `Formulary synchronized: +${added} added, ~${updated} updated, !${failed} failed.`);
+      this.logAudit('system', 'FORMULARY_SYNC_COMPLETED', `Formulary synchronized: +${added} added, ~${updated} updated, !${failed} failed, completeness: ${audit.completeness_percentage}%.`);
 
       return {
         success: status !== 'failed',
         status: status,
+        is_reconciled: audit.is_reconciled,
+        completeness_percentage: audit.completeness_percentage,
         syncLog,
         meta: this.data.formularyMeta,
-        formularyMeta: this.data.formularyMeta
+        audit
       };
-
-    } catch (syncErr) {
-      console.error("Formulary sync failed:", syncErr);
-      
+    } catch (err) {
+      console.error("[Pakistan Formulary Sync Error]:", err);
       const failedLog = {
         id: syncId,
         started_at: startTime,
         completed_at: new Date().toISOString(),
         status: 'failed',
+        formulary_status: 'unavailable',
         source: source,
+        source_total: expectedSourceTotal,
+        records_fetched: incomingRecords.length,
         records_processed: incomingRecords.length,
-        records_added: added,
-        records_updated: updated,
+        records_validated: 0,
+        records_added: 0,
+        records_updated: 0,
         records_deactivated: 0,
         records_failed: incomingRecords.length,
-        error_log: [syncErr.message]
+        records_duplicate: 0,
+        completeness_percentage: 0,
+        is_reconciled: false,
+        error_log: [err.message]
       };
 
       if (!this.data.medicineSyncLogs) this.data.medicineSyncLogs = [];
       this.data.medicineSyncLogs.unshift(failedLog);
-      
+
       if (this.data.formularyMeta) {
         this.data.formularyMeta.status = 'unavailable';
         this.data.formularyMeta.last_synced_at = new Date().toISOString();
+        this.data.formularyMeta.is_reconciled = false;
       }
 
       this.save();
       return {
         success: false,
-        error: syncErr.message,
+        status: 'failed',
+        is_reconciled: false,
+        error: err.message,
         syncLog: failedLog,
         meta: this.data.formularyMeta
       };
@@ -1209,7 +1292,7 @@ class Database {
       }
     }
 
-    const normalizedItems = (data.items || []).map((item, idx) => this.normalizePrescriptionItem(item, idx));
+    const normalizedItems = (data.items || data.medicines || []).map((item, idx) => this.normalizePrescriptionItem(item, idx));
     const now = new Date().toISOString();
 
     if (rx) {
@@ -1233,6 +1316,7 @@ class Database {
       rx.diagnosis = data.diagnosis !== undefined ? data.diagnosis : rx.diagnosis;
       rx.symptoms = data.symptoms !== undefined ? data.symptoms : rx.symptoms;
       rx.items = normalizedItems;
+      rx.medicines = normalizedItems;
       rx.tests_advised = data.tests_advised !== undefined ? data.tests_advised : rx.tests_advised;
       rx.advice = data.advice !== undefined ? data.advice : rx.advice;
       rx.follow_up_date = data.follow_up_date !== undefined ? data.follow_up_date : rx.follow_up_date;
@@ -1264,6 +1348,7 @@ class Database {
         diagnosis: data.diagnosis || '',
         symptoms: data.symptoms || '',
         items: normalizedItems,
+        medicines: normalizedItems,
         tests_advised: data.tests_advised || '',
         advice: data.advice || '',
         follow_up_date: data.follow_up_date || null,
