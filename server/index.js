@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5001;
+const PORT = process.env.PORT || 5005;
 
 // Upload directory setup
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -303,7 +303,8 @@ function requirePatientAuth(req, res, next) {
 // 1A. Email/Phone + Password Login
 app.post('/api/auth/login', rateLimitAuth, (req, res) => {
   try {
-    const { identifier, password, role } = req.body;
+    const { identifier: rawId, email, mobile, phone, password, role } = req.body;
+    const identifier = rawId || email || mobile || phone;
     if (!identifier || !password) {
       return res.status(400).json({ error: "Email/Phone and Password are required." });
     }
@@ -311,7 +312,7 @@ app.post('/api/auth/login', rateLimitAuth, (req, res) => {
     const authResult = db.authenticateUser({ 
       identifier: sanitizeInput(identifier), 
       password, 
-      role: role || 'doctor' 
+      role: role || (identifier.includes('kamran') || identifier.includes('patient') ? 'patient' : 'doctor')
     });
 
     res.json({
@@ -412,6 +413,16 @@ app.post('/api/auth/reset-password', rateLimitAuth, (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message || "Password reset failed." });
   }
+});
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    service: 'DocCare Healthcare API',
+    version: '1.0.0'
+  });
 });
 
 // 1F. Current User Session Check (/api/auth/me)

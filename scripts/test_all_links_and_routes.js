@@ -67,8 +67,8 @@ async function runLinkAndRouteAudit() {
     assert(exists, `Static asset exists: /public/${relPath}`);
   }
 
-  // 2. API Endpoints Audit (Backend on port 5001)
-  console.log('\n[2] Auditing Backend API Endpoints (http://localhost:5001)...');
+  // 2. API Endpoints Audit (Backend on port 5005)
+  console.log('\n[2] Auditing Backend API Endpoints (http://localhost:5005)...');
   const apiEndpoints = [
     { path: '/api/health', expectedStatus: 200, label: 'API Health Check' },
     { path: '/api/medicines/meta', expectedStatus: 200, label: 'Formulary Meta' },
@@ -91,7 +91,7 @@ async function runLinkAndRouteAudit() {
   ];
 
   for (const ep of apiEndpoints) {
-    const res = await testUrl(`http://localhost:5001${ep.path}`);
+    const res = await testUrl(`http://localhost:5005${ep.path}`);
     assert(res.statusCode === ep.expectedStatus, `${ep.label} [${ep.path}] returned HTTP ${res.statusCode}`);
   }
 
