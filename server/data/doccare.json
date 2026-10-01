@@ -181,6 +181,15 @@
       "patientId": "pat-1",
       "createdAt": "2026-10-01T10:12:58.477Z",
       "expiresAt": "2026-10-31T10:12:58.477Z"
+    },
+    {
+      "token": "dck_4753409f5bee8708c1492d702f77327292a886251302b5028edc0ca6e5b54e44",
+      "userId": "user-pat-demo",
+      "role": "patient",
+      "doctorId": null,
+      "patientId": "pat-1",
+      "createdAt": "2026-10-01T15:27:34.409Z",
+      "expiresAt": "2026-10-31T15:27:34.409Z"
     }
   ],
   "passwordResets": [],
@@ -926,6 +935,20 @@
     }
   ],
   "appointments": [
+    {
+      "id": "apt-1790868454439-5038",
+      "appointment_no": "DC-APT-20261001-1814",
+      "doctor_id": "doc-1",
+      "patient_id": "pat-1790849578503-uwf5",
+      "date": "2026-10-01",
+      "start_time": "04:45 PM",
+      "end_time": "04:45 PM",
+      "status": "cancelled",
+      "source": "online",
+      "notes": "Cancelled by patient: Rescheduled by patient",
+      "created_at": "2026-10-01T15:27:34.439Z",
+      "updated_at": "2026-10-01T15:27:34.450Z"
+    },
     {
       "id": "apt-1790849578504-2ekl",
       "appointment_no": "DC-APT-20261001-8707",
@@ -3274,6 +3297,20 @@
     }
   ],
   "auditLogs": [
+    {
+      "id": "audit-1790868454451-ezq6",
+      "doctor_id": "doc-1",
+      "action": "PATIENT_CANCELLED_APPOINTMENT",
+      "details": "Patient cancelled appointment #apt-1790868454439-5038",
+      "timestamp": "2026-10-01T15:27:34.451Z"
+    },
+    {
+      "id": "audit-1790868454439-a06r",
+      "doctor_id": "doc-1",
+      "action": "APPOINTMENT_BOOKED",
+      "details": "Appointment booked for date 2026-10-01 at 04:45 PM",
+      "timestamp": "2026-10-01T15:27:34.439Z"
+    },
     {
       "id": "audit-1790849578518-ld9y",
       "doctor_id": "doc-1",

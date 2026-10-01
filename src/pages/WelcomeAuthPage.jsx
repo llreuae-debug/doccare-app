@@ -271,9 +271,15 @@ export default function WelcomeAuthPage({ initialView = 'welcome', initialRole =
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-7 sm:p-10 shadow-xl border border-slate-200/80 dark:border-slate-800 text-center space-y-6 animate-fade-in">
               
               {/* Logo & Headline */}
-              <div className="flex flex-col items-center space-y-3">
-                <div className="p-3 rounded-2xl bg-teal-50 dark:bg-teal-950/60 border border-teal-100 dark:border-teal-900/60 shadow-xs mb-1">
-                  <DocCareLogo variant="icon" size="lg" animated={true} />
+              <div className="flex flex-col items-center space-y-3 text-center">
+                <div className="relative flex items-center justify-center">
+                  <div className="absolute inset-0 bg-teal-500/10 rounded-full blur-xl transform scale-125 -z-10" />
+                  <img
+                    src="/brand/doccare-logo.png"
+                    alt="DocCare Logo"
+                    className="w-[clamp(140px,40vw,210px)] max-w-[80vw] max-h-[28vh] object-contain drop-shadow-xs"
+                    loading="eager"
+                  />
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl font-black text-slate-900 dark:text-white tracking-tight">

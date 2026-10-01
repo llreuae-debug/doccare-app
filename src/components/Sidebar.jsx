@@ -21,6 +21,7 @@ import {
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { api } from '../services/api';
+import DocCareLogo from './DocCareLogo';
 
 export default function Sidebar({ activeTab, onSelectTab, onOpenQR }) {
   const { t, isRTL } = useLanguage();
@@ -59,6 +60,14 @@ export default function Sidebar({ activeTab, onSelectTab, onOpenQR }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex flex-col w-64 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 p-4 shrink-0 min-h-[calc(100vh-4rem)] transition-colors">
         
+        {/* Top DocCare Brand Header */}
+        <div className="mb-4 pb-3 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <DocCareLogo variant="compact" size="sm" showTagline={false} animated={true} />
+          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/60">
+            MD OS
+          </span>
+        </div>
+
         {/* Practice Status Card */}
         <div className="mb-4 p-3.5 rounded-2xl bg-gradient-to-br from-teal-800 via-teal-700 to-slate-900 text-white shadow-md shadow-teal-700/10">
           <div className="flex items-center justify-between mb-1.5">

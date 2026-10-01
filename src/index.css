@@ -149,10 +149,29 @@
   100% { transform: scale(1); }
 }
 
+/* DocCare Logo Animations & Responsive Utilities */
+@keyframes logoSoftEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.94);
+    filter: drop-shadow(0 0 0 rgba(13, 148, 136, 0));
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 4px 16px rgba(13, 148, 136, 0.16));
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 2px 6px rgba(13, 148, 136, 0.10));
+  }
+}
+
 @keyframes logoEntrance {
   0% {
     opacity: 0;
-    transform: translateY(6px) scale(0.96);
+    transform: translateY(4px) scale(0.96);
   }
   100% {
     opacity: 1;
@@ -160,18 +179,12 @@
   }
 }
 
-@keyframes logoShimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.animate-logo-heartbeat {
-  animation: logoHeartbeat 3.5s ease-in-out infinite;
-  transform-origin: center;
+.animate-logo-soft-entrance {
+  animation: logoSoftEntrance 0.75s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .animate-logo-entrance {
-  animation: logoEntrance 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: logoEntrance 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .logo-glow-hover {
@@ -180,7 +193,19 @@
 
 .logo-glow-hover:hover {
   transform: translateY(-1px) scale(1.02);
-  filter: drop-shadow(0 4px 12px rgba(13, 148, 136, 0.25));
+  filter: drop-shadow(0 4px 12px rgba(13, 148, 136, 0.20));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-logo-soft-entrance,
+  .animate-logo-entrance,
+  .logo-glow-hover,
+  .logo-glow-hover:hover {
+    animation: none !important;
+    transform: none !important;
+    filter: none !important;
+    transition: none !important;
+  }
 }
 
 /* Print Stylesheet for A4 Prescription, Doctor Ledger, Receipts & Medical Documents */
