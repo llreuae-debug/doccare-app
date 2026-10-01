@@ -35,3 +35,4 @@ server/data/*.db-journal
 .Trashes
 ehthumbs.db
 Thumbs.db
+.vercel

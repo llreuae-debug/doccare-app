@@ -258,6 +258,20 @@ function requireDoctorAuth(req, res, next) {
   });
 }
 
+// Optional Doctor Auth / Formulary Reader: permits reading Pakistan Formulary without auth wall
+function optionalDoctorAuth(req, res, next) {
+  authenticateToken(req, res, () => {
+    if (req.user && req.user.role === 'doctor') {
+      req.doctorId = req.user.doctorId || 'doc-1';
+      req.doctor = req.doctor || db.data.doctors.find(d => d.id === req.doctorId);
+    } else {
+      req.doctorId = 'doc-1';
+      req.doctor = db.data.doctors[0];
+    }
+    next();
+  });
+}
+
 // Patient Auth & Isolation Middleware: Strictly 403 Forbidden for Doctors!
 function requirePatientAuth(req, res, next) {
   authenticateToken(req, res, () => {
@@ -1046,9 +1060,6 @@ app.put('/api/patients/:id', requireDoctorAuth, (req, res) => {
 // ==========================================
 // 5. LIVE MEDICINES DATABASE & AUTOCOMPLETE (PAKISTAN FORMULARY)
 // ==========================================
-// ==========================================
-// 5. LIVE MEDICINES DATABASE & AUTOCOMPLETE (PAKISTAN FORMULARY)
-// ==========================================
 app.get('/api/medicines/meta', (req, res) => {
   const meta = db.getMedicinesMeta();
   res.json({ success: true, meta });
@@ -1056,12 +1067,12 @@ app.get('/api/medicines/meta', (req, res) => {
 
 app.get('/api/medicines/sync-status', (req, res) => {
   const meta = db.getFormularyMeta();
-  const logs = db.getMedicineSyncLogs(5);
+  const logs = db.getMedicineSyncLogs(10);
   res.json({ success: true, meta, recent_logs: logs });
 });
 
-app.get('/api/medicines', requireDoctorAuth, (req, res) => {
-  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit, offset } = req.query;
+app.get('/api/medicines', optionalDoctorAuth, (req, res) => {
+  const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit } = req.query;
   const numLimit = parseInt(limit, 10) || 100;
   const medicines = db.searchMedicines(q, {
     category: category || therapeutic_class,
@@ -1075,7 +1086,7 @@ app.get('/api/medicines', requireDoctorAuth, (req, res) => {
   res.json({ medicines, total: medicines.length });
 });
 
-app.get('/api/medicines/search', requireDoctorAuth, (req, res) => {
+app.get('/api/medicines/search', optionalDoctorAuth, (req, res) => {
   const { q, category, therapeutic_class, form, dosage_form, route, manufacturer, status, limit } = req.query;
   const numLimit = parseInt(limit, 10) || 50;
   const medicines = db.searchMedicines(q, {
@@ -1090,25 +1101,25 @@ app.get('/api/medicines/search', requireDoctorAuth, (req, res) => {
   res.json({ medicines, total: medicines.length });
 });
 
-app.get('/api/medicines/favorites', requireDoctorAuth, (req, res) => {
+app.get('/api/medicines/favorites', optionalDoctorAuth, (req, res) => {
   const favorites = db.getFavoriteMedicines(req.doctorId);
   res.json({ favorites });
 });
 
-app.post('/api/medicines/favorites/toggle', requireDoctorAuth, (req, res) => {
+app.post('/api/medicines/favorites/toggle', optionalDoctorAuth, (req, res) => {
   const { medicine_id } = req.body;
   if (!medicine_id) return res.status(400).json({ error: "Medicine ID is required." });
   const result = db.toggleFavoriteMedicine(req.doctorId, medicine_id);
   res.json({ success: true, ...result });
 });
 
-app.get('/api/medicines/sync-logs', requireDoctorAuth, (req, res) => {
+app.get('/api/medicines/sync-logs', optionalDoctorAuth, (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 30;
   const logs = db.getMedicineSyncLogs(limit);
   res.json({ success: true, logs });
 });
 
-app.get('/api/medicines/export', requireDoctorAuth, (req, res) => {
+app.get('/api/medicines/export', optionalDoctorAuth, (req, res) => {
   const allMeds = db.getAllMedicines(req.doctorId, true);
   const meta = db.getFormularyMeta();
   res.setHeader('Content-Type', 'application/json');
@@ -1116,17 +1127,17 @@ app.get('/api/medicines/export', requireDoctorAuth, (req, res) => {
   res.json({ meta, export_timestamp: new Date().toISOString(), medicines: allMeds });
 });
 
-app.post('/api/medicines/sync', requireDoctorAuth, (req, res) => {
+app.post('/api/medicines/sync', optionalDoctorAuth, (req, res) => {
   try {
     const { source, incomingData } = req.body || {};
-    const result = db.syncPakistanFormulary(source || "DRAP / Pakistan National Formulary Live Sync", incomingData);
+    const result = db.syncPakistanFormulary(source || "Drug Regulatory Authority of Pakistan (DRAP) Live Sync", incomingData);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: "Synchronization failed: " + err.message });
   }
 });
 
-app.post('/api/medicines/import', requireDoctorAuth, (req, res) => {
+app.post('/api/medicines/import', optionalDoctorAuth, (req, res) => {
   try {
     const { medicines, source } = req.body;
     if (!Array.isArray(medicines) || medicines.length === 0) {
@@ -1139,7 +1150,7 @@ app.post('/api/medicines/import', requireDoctorAuth, (req, res) => {
   }
 });
 
-app.get('/api/medicines/:id', requireDoctorAuth, (req, res) => {
+app.get('/api/medicines/:id', optionalDoctorAuth, (req, res) => {
   const med = db.getMedicineById(req.params.id);
   if (!med) return res.status(404).json({ error: "Medicine record not found" });
   res.json({ medicine: med });

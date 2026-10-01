@@ -333,18 +333,20 @@ class Database {
   // MEDICINES DATABASE & AUTOCOMPLETE (PAKISTAN FORMULARY)
   // ==========================================
   getAllMedicines(doctorId = null, includeInactive = true) {
-    const list = Array.isArray(this.data.medicines) && this.data.medicines.length > 0
+    const list = Array.isArray(this.data?.medicines) && this.data.medicines.length > 0
       ? this.data.medicines
       : (Array.isArray(PAKISTAN_FORMULARY) ? PAKISTAN_FORMULARY : []);
+
+    const defaultSyncTime = this.data?.formularyMeta?.last_synced_at || LAST_UPDATED || new Date().toISOString();
 
     let meds = list.map(m => ({
       ...m,
       status: m.status || 'active',
       active_ingredient: m.active_ingredient || (Array.isArray(m.active_ingredients) ? m.active_ingredients.join(', ') : m.generic_name || m.brand_name),
       prescription_status: m.prescription_status || (m.therapeutic_class?.includes('Antibiotic') || m.therapeutic_class?.includes('Cardio') ? 'Rx Only' : 'OTC'),
-      registration_reference: m.registration_reference || `DRAP-PK-${(m.id || '000').toUpperCase().replace('MED-', '')}`,
-      source: m.source || "Pakistan National Formulary & DRAP Registered Feed",
-      last_synced_at: m.last_synced_at || this.getFormularyMeta().last_synced_at
+      registration_reference: m.registration_reference || m.registration_number || `DRAP-PK-${(m.id || '000').toUpperCase().replace('MED-', '')}`,
+      source: m.source || "Drug Regulatory Authority of Pakistan (DRAP) Registered Index",
+      last_synced_at: m.last_synced_at || defaultSyncTime
     }));
 
     if (!includeInactive) {
@@ -355,24 +357,53 @@ class Database {
   }
 
   getFormularyMeta() {
+    const list = Array.isArray(this.data?.medicines) && this.data.medicines.length > 0
+      ? this.data.medicines
+      : (Array.isArray(PAKISTAN_FORMULARY) ? PAKISTAN_FORMULARY : []);
+
+    const total = list.length;
+    const active = list.filter(m => (m.status || 'active') === 'active').length;
+    const inactive = list.filter(m => m.status === 'inactive').length;
+
+    const categories = Array.from(new Set(list.map(m => m.therapeutic_class || m.category).filter(Boolean)));
+    const forms = Array.from(new Set(list.map(m => m.dosage_form || m.form).filter(Boolean)));
+    const manufacturers = Array.from(new Set(list.map(m => m.manufacturer).filter(Boolean)));
+
     if (!this.data.formularyMeta) {
       this.data.formularyMeta = {
-        source: "Pakistan National Formulary & DRAP Live Feed",
+        source: "Drug Regulatory Authority of Pakistan (DRAP) Registered Index",
         last_updated: LAST_UPDATED || new Date().toISOString(),
         last_synced_at: new Date().toISOString(),
         last_successful_sync: new Date().toISOString(),
         status: "up_to_date",
-        version: FORMULARY_VERSION || "2026.4.1-PK-DRAP",
+        version: FORMULARY_VERSION || "2026.10.1-PK-DRAP",
         sync_frequency: "Every 24 hours (Daily)",
-        total_medicines: (this.data.medicines || []).length || 110,
-        coverage: "Primary Care, Cardiology, Pediatrics, Dermatology, Antibiotics, Gastroenterology, Pulmonology, Endocrine"
+        total_medicines: total,
+        active_medicines: active,
+        inactive_medicines: inactive,
+        coverage: "Comprehensive DRAP Registered Formulary: Antibiotics, Cardiology, Diabetes, Analgesics, GI, Respiratory, Dermatology, Ophthalmology, Allergy"
       };
+    } else {
+      this.data.formularyMeta.total_medicines = total;
+      this.data.formularyMeta.active_medicines = active;
+      this.data.formularyMeta.inactive_medicines = inactive;
+      if (!this.data.formularyMeta.status) {
+        this.data.formularyMeta.status = "up_to_date";
+      }
+      if (!this.data.formularyMeta.version) {
+        this.data.formularyMeta.version = FORMULARY_VERSION || "2026.10.1-PK-DRAP";
+      }
     }
-    const all = this.getAllMedicines(null, true);
-    this.data.formularyMeta.total_medicines = all.length;
-    this.data.formularyMeta.active_medicines = all.filter(m => m.status === 'active').length;
-    this.data.formularyMeta.inactive_medicines = all.filter(m => m.status === 'inactive').length;
-    return this.data.formularyMeta;
+
+    return {
+      ...this.data.formularyMeta,
+      categoriesCount: categories.length,
+      formsCount: forms.length,
+      manufacturersCount: manufacturers.length,
+      categories,
+      forms,
+      manufacturers
+    };
   }
 
   getMedicinesMeta() {
@@ -831,8 +862,10 @@ class Database {
 
       return {
         success: status !== 'failed',
+        status: status,
         syncLog,
-        meta: this.data.formularyMeta
+        meta: this.data.formularyMeta,
+        formularyMeta: this.data.formularyMeta
       };
 
     } catch (syncErr) {
@@ -1736,27 +1769,6 @@ class Database {
     return doc;
   }
 
-  // ==========================================
-  // PAKISTAN FORMULARY & LIVE MEDICINE ENGINE
-  // ==========================================
-  getMedicinesMeta() {
-    const totalCount = (this.data.medicines || []).length;
-    const categories = Array.from(new Set((this.data.medicines || []).map(m => m.therapeutic_class || m.category).filter(Boolean)));
-    const forms = Array.from(new Set((this.data.medicines || []).map(m => m.dosage_form || m.form).filter(Boolean)));
-    const manufacturers = Array.from(new Set((this.data.medicines || []).map(m => m.manufacturer).filter(Boolean)));
-
-    return {
-      totalCount,
-      version: FORMULARY_VERSION,
-      lastUpdated: LAST_UPDATED,
-      source: "DRAP Pakistan / National Essential Formulary",
-      categoriesCount: categories.length,
-      formsCount: forms.length,
-      manufacturersCount: manufacturers.length,
-      categories,
-      forms
-    };
-  }
 
   // ==========================================
   // DOCTOR LEDGER & PATIENT ACCOUNTING ENGINE
