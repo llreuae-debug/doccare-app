@@ -22,6 +22,7 @@ import PublicVerifyPrescription from './pages/PublicVerifyPrescription';
 import PublicSecureRxViewer from './pages/PublicSecureRxViewer';
 import PatientDashboardPage from './pages/PatientDashboardPage';
 import SEOCitySpecialtyLandingPage from './pages/SEOCitySpecialtyLandingPage';
+import WelcomeAuthPage from './pages/WelcomeAuthPage';
 
 import MedicalAtmosphereBackground from './components/MedicalAtmosphereBackground';
 import { useLanguage } from './context/LanguageContext';
@@ -29,9 +30,20 @@ import { useAuth } from './context/AuthContext';
 import { Globe, ArrowLeft, Shield, Heart, Stethoscope } from 'lucide-react';
 
 function parsePublicRoute(path) {
+  if (path === '/login/doctor' || path === '/doctor/login') {
+    return { type: 'auth', view: 'doctor-login', role: 'doctor' };
+  }
+  if (path === '/login/patient' || path === '/patient/login') {
+    return { type: 'auth', view: 'patient-login', role: 'patient' };
+  }
+  if (path === '/login' || path === '/welcome') {
+    return { type: 'auth', view: 'welcome' };
+  }
   if (path.startsWith('/dr/') || path.startsWith('/doctor/')) {
     const slug = path.replace('/dr/', '').replace('/doctor/', '');
-    return { type: 'doctor', slug };
+    if (slug && slug !== 'dashboard' && slug !== 'login') {
+      return { type: 'doctor', slug };
+    }
   }
   if (path.startsWith('/verify-rx/') || path.startsWith('/verify/')) {
     const token = path.replace('/verify-rx/', '').replace('/verify/', '');
@@ -246,7 +258,32 @@ export default function App() {
   }
 
   // ==========================================
-  // DOCTOR PORTAL & DEFAULT CLINICAL WORKSPACE
+  // UNAUTHENTICATED USERS: SIMPLE WELCOME / LOGIN SCREEN
+  // ==========================================
+  if (!isAuthenticated) {
+    return (
+      <>
+        {showSplash && (
+          <DocCareSplash onComplete={() => setShowSplash(false)} />
+        )}
+        <WelcomeAuthPage
+          initialView={publicRoute?.view || 'welcome'}
+          initialRole={publicRoute?.role || null}
+          onAuthSuccess={(roleType) => {
+            if (roleType === 'doctor') {
+              window.history.pushState({}, '', '/doctor/dashboard');
+              setActiveTab('dashboard');
+            } else {
+              window.history.pushState({}, '', '/patient/dashboard');
+            }
+          }}
+        />
+      </>
+    );
+  }
+
+  // ==========================================
+  // DOCTOR PORTAL & CLINICAL WORKSPACE (ROLE: DOCTOR ONLY)
   // ==========================================
   return (
     <>
