@@ -2597,7 +2597,12 @@ setInterval(() => {
   }
 }, SYNC_INTERVAL_MS);
 
-app.listen(PORT, () => {
-  console.log(`DocCare Step 4 Server running at http://localhost:${PORT}`);
-});
+if (process.env.NODE_ENV !== 'production' || process.env.VERCEL !== '1') {
+  app.listen(PORT, () => {
+    console.log(`DocCare Step 4 Server running at http://localhost:${PORT}`);
+  });
+}
+
+export { app };
+export default app;
 
