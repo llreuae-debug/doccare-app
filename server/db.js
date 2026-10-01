@@ -142,38 +142,105 @@ class Database {
         fs.mkdirSync(dataDir, { recursive: true });
       }
 
-      // Initialize with full seeds, users, sessions, formulary
-      this.data = {
-        users: buildSeedUsers(),
-        sessions: [],
-        passwordResets: [],
-        doctors: SEED_DOCTORS,
-        patients: SEED_PATIENTS,
-        appointments: SEED_APPOINTMENTS,
-        medicines: PAKISTAN_FORMULARY,
-        favoriteMedicines: [
-          { id: "fav-1", doctor_id: "doc-1", medicine_id: "med-pan-01" }, // Panadol
-          { id: "fav-2", doctor_id: "doc-1", medicine_id: "med-aug-01" }, // Augmentin
-          { id: "fav-3", doctor_id: "doc-1", medicine_id: "med-ris-01" }, // Risek
-          { id: "fav-4", doctor_id: "doc-1", medicine_id: "med-dak-01" }, // Daktarin Cream
-          { id: "fav-5", doctor_id: "doc-1", medicine_id: "med-ven-01" }  // Ventolin
-        ],
-        prescriptions: SEED_PRESCRIPTIONS,
-        prescriptionTemplates: SEED_TEMPLATES,
-        doctorPdfSettings: SEED_DOCTOR_PDF_SETTINGS,
-        prescriptionShares: SEED_PRESCRIPTION_SHARES,
-        messageLogs: SEED_MESSAGE_LOGS,
-        ledgerEntries: SEED_LEDGER,
-        auditLogs: [
-          {
-            id: "audit-1",
-            doctor_id: "doc-1",
-            action: "PRACTICE_SYSTEM_INITIALIZED",
-            details: "DocCare clinical practice suite initialized with Pakistan Formulary Live Medicine Database & Dual-Role Auth",
-            timestamp: new Date().toISOString()
+      let loadedFromFile = false;
+      if (fs.existsSync(DB_FILE)) {
+        try {
+          const raw = fs.readFileSync(DB_FILE, 'utf8');
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            this.data = {
+              users: parsed.users || buildSeedUsers(),
+              sessions: parsed.sessions || [],
+              passwordResets: parsed.passwordResets || [],
+              doctors: parsed.doctors || SEED_DOCTORS,
+              patients: parsed.patients || SEED_PATIENTS,
+              appointments: parsed.appointments || SEED_APPOINTMENTS,
+              medicines: Array.isArray(parsed.medicines) && parsed.medicines.length >= PAKISTAN_FORMULARY.length
+                ? parsed.medicines
+                : PAKISTAN_FORMULARY,
+              favoriteMedicines: parsed.favoriteMedicines || [
+                { id: "fav-1", doctor_id: "doc-1", medicine_id: "med-drap-paraceta-panado-11" },
+                { id: "fav-2", doctor_id: "doc-1", medicine_id: "med-drap-amoxicil-augmen-11" },
+                { id: "fav-3", doctor_id: "doc-1", medicine_id: "med-drap-omeprazo-risek-11" },
+                { id: "fav-4", doctor_id: "doc-1", medicine_id: "med-drap-miconazo-daktar-11" },
+                { id: "fav-5", doctor_id: "doc-1", medicine_id: "med-drap-salbutam-ventol-11" }
+              ],
+              prescriptions: parsed.prescriptions || SEED_PRESCRIPTIONS,
+              prescriptionTemplates: parsed.prescriptionTemplates || SEED_TEMPLATES,
+              doctorPdfSettings: parsed.doctorPdfSettings || SEED_DOCTOR_PDF_SETTINGS,
+              prescriptionShares: parsed.prescriptionShares || SEED_PRESCRIPTION_SHARES,
+              messageLogs: parsed.messageLogs || SEED_MESSAGE_LOGS,
+              ledgerEntries: parsed.ledgerEntries || SEED_LEDGER,
+              auditLogs: parsed.auditLogs || [],
+              formularyMeta: parsed.formularyMeta || {
+                source: "Drug Regulatory Authority of Pakistan (DRAP) National Master Register",
+                last_updated: LAST_UPDATED,
+                last_synced_at: new Date().toISOString(),
+                last_successful_sync: new Date().toISOString(),
+                status: "up_to_date",
+                version: FORMULARY_VERSION,
+                sync_frequency: "Every 24 hours (Daily)",
+                total_medicines: PAKISTAN_FORMULARY.length,
+                active_medicines: PAKISTAN_FORMULARY.length,
+                inactive_medicines: 0
+              },
+              syncLogs: parsed.syncLogs || []
+            };
+            loadedFromFile = true;
           }
-        ]
-      };
+        } catch (e) {
+          console.warn("[DB] Could not parse existing DB file, re-initializing:", e.message);
+        }
+      }
+
+      if (!loadedFromFile) {
+        // Initialize with full seeds, users, sessions, formulary
+        this.data = {
+          users: buildSeedUsers(),
+          sessions: [],
+          passwordResets: [],
+          doctors: SEED_DOCTORS,
+          patients: SEED_PATIENTS,
+          appointments: SEED_APPOINTMENTS,
+          medicines: PAKISTAN_FORMULARY,
+          favoriteMedicines: [
+            { id: "fav-1", doctor_id: "doc-1", medicine_id: "med-drap-paraceta-panado-11" },
+            { id: "fav-2", doctor_id: "doc-1", medicine_id: "med-drap-amoxicil-augmen-11" },
+            { id: "fav-3", doctor_id: "doc-1", medicine_id: "med-drap-omeprazo-risek-11" },
+            { id: "fav-4", doctor_id: "doc-1", medicine_id: "med-drap-miconazo-daktar-11" },
+            { id: "fav-5", doctor_id: "doc-1", medicine_id: "med-drap-salbutam-ventol-11" }
+          ],
+          prescriptions: SEED_PRESCRIPTIONS,
+          prescriptionTemplates: SEED_TEMPLATES,
+          doctorPdfSettings: SEED_DOCTOR_PDF_SETTINGS,
+          prescriptionShares: SEED_PRESCRIPTION_SHARES,
+          messageLogs: SEED_MESSAGE_LOGS,
+          ledgerEntries: SEED_LEDGER,
+          auditLogs: [
+            {
+              id: "audit-1",
+              doctor_id: "doc-1",
+              action: "PRACTICE_SYSTEM_INITIALIZED",
+              details: "DocCare clinical practice suite initialized with Pakistan Formulary Live Medicine Database & Dual-Role Auth",
+              timestamp: new Date().toISOString()
+            }
+          ],
+          formularyMeta: {
+            source: "Drug Regulatory Authority of Pakistan (DRAP) National Master Register",
+            last_updated: LAST_UPDATED,
+            last_synced_at: new Date().toISOString(),
+            last_successful_sync: new Date().toISOString(),
+            status: "up_to_date",
+            version: FORMULARY_VERSION,
+            sync_frequency: "Every 24 hours (Daily)",
+            total_medicines: PAKISTAN_FORMULARY.length,
+            active_medicines: PAKISTAN_FORMULARY.length,
+            inactive_medicines: 0
+          },
+          syncLogs: []
+        };
+      }
+
       this.save();
     } catch (err) {
       console.error("Database initialization error:", err);
