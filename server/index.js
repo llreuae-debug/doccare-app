@@ -702,23 +702,21 @@ app.get('/api/public/doctors/:slugOrId/available-slots', (req, res) => {
 
 // 2F. Public Appointment Booking
 app.post('/api/public/appointments/book', rateLimitPublicBooking, (req, res) => {
-  const {
-    doctor_id,
-    date,
-    start_time,
-    end_time,
-    name,
-    age,
-    gender,
-    phone,
-    whatsapp,
-    city,
-    allergies,
-    chronic_conditions,
-    current_medicines,
-    reason_for_visit,
-    consent_given
-  } = req.body;
+  const doctor_id = req.body.doctor_id;
+  const date = req.body.date;
+  const start_time = req.body.start_time || req.body.time_slot;
+  const end_time = req.body.end_time;
+  const name = req.body.name || req.body.patient_name;
+  const age = req.body.age;
+  const gender = req.body.gender;
+  const phone = req.body.phone || req.body.patient_phone;
+  const whatsapp = req.body.whatsapp || req.body.patient_whatsapp || phone;
+  const city = req.body.city;
+  const allergies = req.body.allergies;
+  const chronic_conditions = req.body.chronic_conditions;
+  const current_medicines = req.body.current_medicines;
+  const reason_for_visit = req.body.reason_for_visit || req.body.reason || req.body.notes;
+  const consent_given = req.body.consent_given !== undefined ? req.body.consent_given : true;
 
   if (!doctor_id || !date || !start_time || !name || !phone) {
     return res.status(400).json({ error: "Missing required booking details." });
@@ -1101,25 +1099,25 @@ app.get('/api/medicines/search', optionalDoctorAuth, (req, res) => {
   res.json({ medicines, total: medicines.length });
 });
 
-app.get('/api/medicines/favorites', optionalDoctorAuth, (req, res) => {
+app.get('/api/medicines/favorites', requireDoctorAuth, (req, res) => {
   const favorites = db.getFavoriteMedicines(req.doctorId);
   res.json({ favorites });
 });
 
-app.post('/api/medicines/favorites/toggle', optionalDoctorAuth, (req, res) => {
+app.post('/api/medicines/favorites/toggle', requireDoctorAuth, (req, res) => {
   const { medicine_id } = req.body;
   if (!medicine_id) return res.status(400).json({ error: "Medicine ID is required." });
   const result = db.toggleFavoriteMedicine(req.doctorId, medicine_id);
   res.json({ success: true, ...result });
 });
 
-app.get('/api/medicines/sync-logs', optionalDoctorAuth, (req, res) => {
+app.get('/api/medicines/sync-logs', requireDoctorAuth, (req, res) => {
   const limit = parseInt(req.query.limit, 10) || 30;
   const logs = db.getMedicineSyncLogs(limit);
   res.json({ success: true, logs });
 });
 
-app.get('/api/medicines/export', optionalDoctorAuth, (req, res) => {
+app.get('/api/medicines/export', requireDoctorAuth, (req, res) => {
   const allMeds = db.getAllMedicines(req.doctorId, true);
   const meta = db.getFormularyMeta();
   res.setHeader('Content-Type', 'application/json');
@@ -1127,7 +1125,7 @@ app.get('/api/medicines/export', optionalDoctorAuth, (req, res) => {
   res.json({ meta, export_timestamp: new Date().toISOString(), medicines: allMeds });
 });
 
-app.post('/api/medicines/sync', optionalDoctorAuth, (req, res) => {
+app.post('/api/medicines/sync', requireDoctorAuth, (req, res) => {
   try {
     const { source, incomingData } = req.body || {};
     const result = db.syncPakistanFormulary(source || "Drug Regulatory Authority of Pakistan (DRAP) Live Sync", incomingData);
@@ -1137,7 +1135,7 @@ app.post('/api/medicines/sync', optionalDoctorAuth, (req, res) => {
   }
 });
 
-app.post('/api/medicines/import', optionalDoctorAuth, (req, res) => {
+app.post('/api/medicines/import', requireDoctorAuth, (req, res) => {
   try {
     const { medicines, source } = req.body;
     if (!Array.isArray(medicines) || medicines.length === 0) {
