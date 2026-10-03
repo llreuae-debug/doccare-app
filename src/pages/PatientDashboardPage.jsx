@@ -1843,26 +1843,39 @@ export default function PatientDashboardPage({ onNavigateToDirectory, onSelectDo
                       <RefreshCw className="w-5 h-5 text-teal-600 animate-spin mx-auto mb-1" />
                       <p className="text-[11px] text-slate-400">{isPatientRTL ? "دستیاب اوقات جانچے جا رہے ہیں..." : "Fetching available slots..."}</p>
                     </div>
-                  ) : (!bookingModal.slotsData?.available || !bookingModal.slotsData?.slots?.length) ? (
-                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-center">
-                      {bookingModal.slotsData?.reason || (isPatientRTL ? "اس تاریخ کو ڈاکٹر دستیاب نہیں ہیں۔ براہ کرم کوئی اور تاریخ منتخب کریں۔" : "Doctor is not available on this date. Please select another date.")}
+                  ) : (bookingModal.slotsData?.available === false && bookingModal.slotsData?.isAvailableDay === false) || !bookingModal.slotsData?.slots?.length ? (
+                    <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 text-amber-800 dark:text-amber-200 text-center font-medium">
+                      {bookingModal.slotsData?.message || bookingModal.slotsData?.reason || (isPatientRTL ? "اس تاریخ کو ڈاکٹر دستیاب نہیں ہیں۔ براہ کرم کوئی اور تاریخ منتخب کریں۔" : "Doctor is not available on this date. Please select another date.")}
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
-                      {bookingModal.slotsData.slots.map(slot => (
-                        <button
-                          key={slot}
-                          type="button"
-                          onClick={() => setBookingModal(prev => ({ ...prev, selectedSlot: slot, errorMessage: '' }))}
-                          className={`py-2 px-2 rounded-xl text-center font-bold text-xs transition-all ${
-                            bookingModal.selectedSlot === slot
-                              ? 'bg-teal-600 text-white shadow-xs'
-                              : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
-                          }`}
-                        >
-                          {slot}
-                        </button>
-                      ))}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-52 overflow-y-auto p-1 custom-scrollbar">
+                      {bookingModal.slotsData.slots.map((slotObj, idx) => {
+                        const slotStr = typeof slotObj === 'string' ? slotObj : (slotObj.slot || slotObj.startTime);
+                        const displayTime = typeof slotObj === 'string' ? slotObj : slotObj.startTime;
+                        const isAvailable = typeof slotObj === 'string' ? true : (slotObj.available !== false && slotObj.isAvailable !== false);
+                        const isSelected = bookingModal.selectedSlot === slotStr || bookingModal.selectedSlot === displayTime;
+
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            disabled={!isAvailable}
+                            onClick={() => setBookingModal(prev => ({ ...prev, selectedSlot: slotStr, errorMessage: '' }))}
+                            className={`py-2.5 px-2 rounded-xl text-center font-bold text-xs transition-all border ${
+                              !isAvailable
+                                ? 'bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-800 cursor-not-allowed line-through'
+                                : isSelected
+                                ? 'bg-teal-600 text-white border-teal-600 shadow-md ring-2 ring-teal-600/30'
+                                : 'bg-teal-50/50 dark:bg-teal-950/30 text-slate-800 dark:text-slate-200 border-teal-100 dark:border-teal-900/60 hover:bg-teal-600 hover:text-white hover:border-teal-600'
+                            }`}
+                          >
+                            <span className="block">{displayTime}</span>
+                            {typeof slotObj === 'object' && slotObj.slot && slotObj.slot !== displayTime && (
+                              <span className="block text-[10px] font-normal opacity-80 mt-0.5">{slotObj.slot}</span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

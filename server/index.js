@@ -673,61 +673,103 @@ app.get('/api/public/doctors/:slugOrId/available-slots', (req, res) => {
 
   if (!date) return res.status(400).json({ error: "Date parameter required" });
 
-  const targetDate = new Date(date);
+  // Safe date parsing to prevent UTC/local timezone shifts
+  let dayName;
   const daysOfWeek = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-  const dayName = daysOfWeek[targetDate.getDay()];
+  if (typeof date === 'string' && date.includes('-')) {
+    const [y, m, d] = date.split('-').map(Number);
+    const targetDate = new Date(y, m - 1, d, 12, 0, 0);
+    dayName = daysOfWeek[targetDate.getDay()];
+  } else {
+    const targetDate = new Date(date);
+    dayName = daysOfWeek[targetDate.getDay()];
+  }
 
-  if (!doc.availableDays || !doc.availableDays.includes(dayName)) {
+  const doctorAvailableDays = (doc.availableDays && doc.availableDays.length > 0)
+    ? doc.availableDays
+    : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  const isDayAvailable = doctorAvailableDays.includes(dayName);
+
+  if (!isDayAvailable) {
     return res.json({ 
+      available: false,
       isAvailableDay: false, 
       dayName, 
+      date,
       slots: [], 
-      message: `Dr. ${doc.name} is not available for consultations on ${dayName}s.` 
+      message: `Dr. ${doc.name} is not available for consultations on ${dayName}s. Available days: ${doctorAvailableDays.join(', ')}.` 
     });
   }
 
-  const existingApts = db.getAppointmentsByDoctor(doc.id).filter(a => a.date === date && a.status !== 'cancelled');
-  const bookedTimes = new Set(existingApts.map(a => a.start_time.toLowerCase().trim()));
+  const defaultSlots = [
+    "04:00 PM - 04:15 PM",
+    "04:15 PM - 04:30 PM",
+    "04:30 PM - 04:45 PM",
+    "04:45 PM - 05:00 PM",
+    "05:00 PM - 05:15 PM",
+    "05:15 PM - 05:30 PM",
+    "05:30 PM - 05:45 PM",
+    "05:45 PM - 06:00 PM",
+    "06:00 PM - 06:15 PM",
+    "06:15 PM - 06:30 PM",
+    "06:30 PM - 06:45 PM",
+    "06:45 PM - 07:00 PM"
+  ];
 
-  const slotResults = (doc.timeSlots || []).map(slotStr => {
+  const sourceSlots = (doc.timeSlots && doc.timeSlots.length > 0) ? doc.timeSlots : defaultSlots;
+
+  const existingApts = db.getAppointmentsByDoctor(doc.id).filter(a => a.date === date && a.status !== 'cancelled');
+  const bookedTimes = new Set(existingApts.map(a => (a.start_time || '').toLowerCase().trim()));
+
+  const slotResults = sourceSlots.map(slotStr => {
     const parts = slotStr.split('-');
     const startTime = parts[0].trim();
     const endTime = parts[1] ? parts[1].trim() : startTime;
-    const isBooked = bookedTimes.has(startTime.toLowerCase().trim());
+    const isBooked = bookedTimes.has(startTime.toLowerCase().trim()) || bookedTimes.has(slotStr.toLowerCase().trim());
 
     return {
       slot: slotStr,
       startTime,
       endTime,
-      isAvailable: !isBooked
+      available: !isBooked,
+      isAvailable: !isBooked,
+      isBooked
     };
   });
 
+  const hasAnyAvailableSlot = slotResults.some(s => s.available);
+
   res.json({
+    available: true,
     isAvailableDay: true,
+    hasAvailableSlots: hasAnyAvailableSlot,
     dayName,
     date,
-    slots: slotResults
+    slots: slotResults,
+    message: hasAnyAvailableSlot ? null : "All appointment slots for this date are currently fully booked."
   });
 });
 
 // 2F. Public Appointment Booking
 app.post('/api/public/appointments/book', rateLimitPublicBooking, (req, res) => {
-  const doctor_id = req.body.doctor_id;
+  const doctor_id = req.body.doctor_id || req.body.doctorId;
   const date = req.body.date;
-  const start_time = req.body.start_time || req.body.time_slot;
-  const end_time = req.body.end_time;
-  const name = req.body.name || req.body.patient_name;
-  const age = req.body.age;
-  const gender = req.body.gender;
-  const phone = req.body.phone || req.body.patient_phone;
-  const whatsapp = req.body.whatsapp || req.body.patient_whatsapp || phone;
+  const rawStartTime = req.body.start_time || req.body.startTime || req.body.time_slot || req.body.timeSlot;
+  const start_time = rawStartTime ? (rawStartTime.includes('-') ? rawStartTime.split('-')[0].trim() : rawStartTime.trim()) : null;
+  const end_time = req.body.end_time || req.body.endTime || (rawStartTime && rawStartTime.includes('-') ? rawStartTime.split('-')[1].trim() : null);
+  const name = req.body.name || req.body.patient_name || req.body.patientName;
+  const name_urdu = req.body.name_urdu || req.body.patient_name_urdu || req.body.patientNameUrdu || '';
+  const age = req.body.age || req.body.patient_age || req.body.patientAge;
+  const gender = req.body.gender || req.body.patient_gender || req.body.patientGender;
+  const phone = req.body.phone || req.body.patient_phone || req.body.patientPhone;
+  const whatsapp = req.body.whatsapp || req.body.patient_whatsapp || req.body.patientWhatsapp || phone;
   const city = req.body.city;
   const allergies = req.body.allergies;
-  const chronic_conditions = req.body.chronic_conditions;
-  const current_medicines = req.body.current_medicines;
-  const reason_for_visit = req.body.reason_for_visit || req.body.reason || req.body.notes;
-  const consent_given = req.body.consent_given !== undefined ? req.body.consent_given : true;
+  const chronic_conditions = req.body.chronic_conditions || req.body.chronicConditions;
+  const current_medicines = req.body.current_medicines || req.body.currentMedicines;
+  const reason_for_visit = req.body.reason_for_visit || req.body.reasonForVisit || req.body.reason || req.body.notes;
+  const consent_given = (req.body.consent_given !== undefined) ? req.body.consent_given : (req.body.consentGiven !== undefined ? req.body.consentGiven : true);
 
   if (!doctor_id || !date || !start_time || !name || !phone) {
     return res.status(400).json({ error: "Missing required booking details." });

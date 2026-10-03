@@ -122,8 +122,8 @@ export default function PublicDoctorProfile({ slug, onBackToApp, autoOpenBooking
       setErrorMessage(isPatientRTL ? "براہ کرم معائنے کی تاریخ منتخب کریں۔" : "Please select a consultation date.");
       return;
     }
-    if (!slotsData.available) {
-      setErrorMessage(slotsData.reason || (isPatientRTL ? "ڈاکٹر اس تاریخ کو دستیاب نہیں ہیں۔" : "Doctor is not available on this date."));
+    if (slotsData.available === false && slotsData.isAvailableDay === false) {
+      setErrorMessage(slotsData.message || slotsData.reason || (isPatientRTL ? "ڈاکٹر اس تاریخ کو دستیاب نہیں ہیں۔" : "Doctor is not available on this date."));
       return;
     }
     setErrorMessage('');
